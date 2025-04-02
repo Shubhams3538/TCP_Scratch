@@ -1,0 +1,102 @@
+1. What is a Raw Socket?
+
+A raw socket is a type of socket that allows an application to send and receive network packets directly, bypassing the normal TCP/IP stack of the operating system. This means:
+
+    You construct the entire packet manually (including IP and TCP headers).
+    The kernel does not modify or process the packet (except for some cases, like certain headers).
+    It allows complete control over networking, useful for custom protocols, packet sniffing, and network testing.
+
+
+2. Why Do We Need to Bypass the Kernel's TCP Stack?
+
+By default, when you create a socket in Linux using socket(AF_INET, SOCK_STREAM, 0), the kernel handles everything:
+
+    TCP three-way handshake (SYN, SYN-ACK, ACK)
+    Packet retransmissions
+    Flow control & congestion control
+    Closing the connection
+
+Since we are implementing our own TCP stack, we cannot let the kernel handle TCP for us. Instead, we:
+
+    Use raw sockets to construct, send, and receive TCP packets manually.
+    Handle everything ourselves, from handshaking to retransmissions.
+
+3. How Raw Sockets Work in Linux
+
+Linux provides raw sockets via the AF_PACKET and SOCK_RAW socket types. Here’s how they work:
+
+    Normal socket (kernel-managed TCP)
+
+int sock = socket(AF_INET, SOCK_STREAM, 0); // Kernel does TCP
+
+Raw socket (manually handle TCP)
+
+int sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP); // We handle TCP manually
+
+Raw socket (bypassing even IP layer, sending Ethernet frames directly)
+
+    int sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP)); // Full control
+
+
+
+4. What Do We Need to Implement?
+
+To successfully send and receive TCP packets manually, we need to:
+
+    Open a raw socket (SOCK_RAW)
+    Construct the IP header and TCP header manually
+    Compute checksums (IP & TCP checksum)
+    Send the raw packet using sendto()
+    Receive packets and process them using recvfrom()
+    Implement TCP features (handshake, retransmission, closing, etc.)
+
+5. Where to Create Our First File?
+
+You should create a file inside your src/ directory:
+
+tcp_from_scratch/
+├── src/
+│   ├── raw_socket.c  # First implementation of raw sockets
+│   ├── tcp.h         # TCP header definitions
+│   ├── utils.c       # Helper functions
+├── CMakeLists.txt
+├── build/
+
+Create a new file:
+
+touch src/raw_socket.c
+
+***********************************************// NOTES ABOUT  TCP AND IP ********************************************************************
+
+
+1. Why does IP not need a pseudo header?
+
+    The IP checksum is calculated only over the IP header (not the payload).
+    The reason: Each router along the way modifies certain fields in the IP header (like the TTL field), so recalculating a checksum on the whole packet would be inefficient.
+    Instead, each router only checks and recomputes the IP header checksum before forwarding.
+    The transport layer (TCP/UDP) is responsible for verifying that the payload is intact.
+
+
+2. Why does TCP need a pseudo header for checksum?
+
+TCP operates at the transport layer, and its checksum must ensure that the correct data reaches the correct process on the correct machine.
+This means:
+
+The TCP checksum should verify not just the TCP header and data, but also confirm that the packet was sent to the correct destination.
+However, the TCP header alone does not include the source and destination IP addresses.
+
+To solve this, TCP includes a pseudo header when computing the checksum.
+The pseudo header contains:
+
+    Source IP address (ensures sender identity)
+    Destination IP address (ensures receiver identity)
+    Protocol number (ensures it’s TCP, not some other protocol)
+    TCP segment length (ensures complete data was received)
+
+🚨 Important:
+
+    The pseudo header is only used for checksum calculation.
+    It is not actually sent in the packet.
+
+
+    
